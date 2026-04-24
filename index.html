@@ -1,133 +1,223 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Snake Game</title>
+
 <style>
   body {
+    margin: 0;
     background: #0f172a;
     color: white;
-    text-align: center;
     font-family: Arial;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+
+  .container {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
   }
 
   canvas {
     background: #111827;
-    margin-top: 20px;
     border: 3px solid #38bdf8;
+  }
+
+  .panel {
+    width: 180px;
+    background: #1e293b;
+    padding: 15px;
+    border-radius: 10px;
+  }
+
+  button {
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #38bdf8;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  button:hover {
+    background: #0ea5e9;
+  }
+
+  .overlay {
+    position: absolute;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.8);
+    width: 400px;
+    height: 400px;
+    color: white;
+    font-size: 20px;
   }
 </style>
 </head>
+
 <body>
 
-<h1>🐍 Snake Game</h1>
-<p>Use WASD or Arrow Keys</p>
-<p id="score">Score: 0</p>
+<div class="container">
+  <div style="position: relative;">
+    <canvas id="game" width="400" height="400"></canvas>
 
-<canvas id="game" width="400" height="400"></canvas>
+    <div class="overlay" id="gameOver">
+      <h2>💀 Game Over</h2>
+      <p id="finalScore"></p>
+      <button onclick="restart()">Retry</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>🐍 Snake</h3>
+    <p id="score">Score: 0</p>
+    <p id="highScore">High Score: 0</p>
+    <p>Controls:</p>
+    <p>W A S D</p>
+    <p>or Arrow Keys</p>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 const grid = 20;
-let snake = [{x: 200, y: 200}];
-let dx = grid;
-let dy = 0;
+let snake, dx, dy, food, score, highScore;
 
-let food = {
-  x: Math.floor(Math.random() * 20) * grid,
-  y: Math.floor(Math.random() * 20) * grid
-};
+highScore = localStorage.getItem("highScore") || 0;
+document.getElementById("highScore").innerText = "High Score: " + highScore;
 
-let score = 0;
-let count = 0;
+function init() {
+  snake = [{x: 200, y: 200}];
+  dx = grid;
+  dy = 0;
+  score = 0;
 
-// Slower speed (increase this to make slower)
-const speed = 12;
+  food = randomFood();
 
-function gameLoop() {
+  document.getElementById("score").innerText = "Score: 0";
+  document.getElementById("gameOver").style.display = "none";
+}
+
+function randomFood() {
+  return {
+    x: Math.floor(Math.random() * 20) * grid,
+    y: Math.floor(Math.random() * 20) * grid
+  };
+}
+
+// SPEED (10 = smooth Google-like pace)
+const speed = 10;
+let lastTime = 0;
+
+function gameLoop(time) {
   requestAnimationFrame(gameLoop);
 
-  if (++count < speed) return;
-  count = 0;
+  if (!lastTime) lastTime = time;
+  const delta = time - lastTime;
 
-  // Move head
+  if (delta < speed * 10) {
+    draw();
+    return;
+  }
+
+  lastTime = time;
+  update();
+  draw();
+}
+
+function update() {
   const head = {
     x: snake[0].x + dx,
     y: snake[0].y + dy
   };
 
-  // Wall collision
+  // wall collision
   if (head.x < 0 || head.x >= canvas.width ||
       head.y < 0 || head.y >= canvas.height) {
-    return resetGame();
+    return gameOver();
   }
 
-  // Self collision
-  for (let cell of snake) {
-    if (cell.x === head.x && cell.y === head.y) {
-      return resetGame();
+  // self collision
+  for (let part of snake) {
+    if (part.x === head.x && part.y === head.y) {
+      return gameOver();
     }
   }
 
   snake.unshift(head);
 
-  // Eat food
   if (head.x === food.x && head.y === food.y) {
     score++;
     document.getElementById("score").innerText = "Score: " + score;
-
-    food.x = Math.floor(Math.random() * 20) * grid;
-    food.y = Math.floor(Math.random() * 20) * grid;
+    food = randomFood();
   } else {
     snake.pop();
   }
+}
 
-  // Draw
+function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Food
+  // food
   ctx.fillStyle = "red";
   ctx.fillRect(food.x, food.y, grid - 1, grid - 1);
 
-  // Snake
+  // snake
   ctx.fillStyle = "lime";
-  snake.forEach(cell => {
-    ctx.fillRect(cell.x, cell.y, grid - 1, grid - 1);
-  });
+  for (let s of snake) {
+    ctx.fillRect(s.x, s.y, grid - 1, grid - 1);
+  }
 }
 
-function resetGame() {
-  snake = [{x: 200, y: 200}];
-  dx = grid;
-  dy = 0;
-  score = 0;
-  document.getElementById("score").innerText = "Score: 0";
+function gameOver() {
+  document.getElementById("gameOver").style.display = "flex";
+  document.getElementById("finalScore").innerText =
+    "Score: " + score;
+
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("highScore", highScore);
+  }
+
+  document.getElementById("highScore").innerText =
+    "High Score: " + highScore;
 }
 
-// Controls (WASD + Arrow Keys)
+function restart() {
+  init();
+}
+
 document.addEventListener("keydown", e => {
-  const key = e.key.toLowerCase();
+  const k = e.key.toLowerCase();
 
-  if ((key === "arrowleft" || key === "a") && dx === 0) {
+  if ((k === "arrowleft" || k === "a") && dx === 0) {
     dx = -grid; dy = 0;
   }
-  else if ((key === "arrowup" || key === "w") && dy === 0) {
+  else if ((k === "arrowup" || k === "w") && dy === 0) {
     dx = 0; dy = -grid;
   }
-  else if ((key === "arrowright" || key === "d") && dx === 0) {
+  else if ((k === "arrowright" || k === "d") && dx === 0) {
     dx = grid; dy = 0;
   }
-  else if ((key === "arrowdown" || key === "s") && dy === 0) {
+  else if ((k === "arrowdown" || k === "s") && dy === 0) {
     dx = 0; dy = grid;
   }
 });
 
+init();
 requestAnimationFrame(gameLoop);
 </script>
 
 </body>
 </html>
-```
