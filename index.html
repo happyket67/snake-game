@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ultra Smooth Snake</title>
+<title>Pro Snake</title>
 
 <style>
 body {
@@ -13,8 +13,6 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  user-select: none;
-  overflow: hidden;
 }
 
 .hud {
@@ -25,31 +23,34 @@ body {
   background: #111827;
 }
 
-canvas {
+.wrapper {
+  position: relative;
   margin-top: 10px;
+}
+
+canvas {
   background: #0f172a;
   border: 2px solid #38bdf8;
-  border-radius: 10px;
 }
 
 .overlay {
   position: absolute;
-  width: 420px;
-  height: 420px;
+  width: 400px;
+  height: 400px;
   display: none;
   justify-content: center;
   align-items: center;
   flex-direction: column;
   background: rgba(0,0,0,0.85);
-  border-radius: 10px;
 }
 
-/* mobile swipe area */
-#touchArea {
-  position: absolute;
-  width: 420px;
-  height: 420px;
-  top: 70px;
+button {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: none;
+  background: #38bdf8;
+  font-weight: bold;
+  cursor: pointer;
 }
 </style>
 </head>
@@ -59,40 +60,38 @@ canvas {
 <div class="hud">
   <div id="score">Score: 0</div>
   <div id="high">High: 0</div>
-  <button onclick="toggleAI()">AI</button>
+  <button onclick="toggleAI()">AI OFF</button>
 </div>
 
-<div style="position:relative;">
-<canvas id="game" width="420" height="420"></canvas>
+<div class="wrapper">
+<canvas id="game" width="400" height="400"></canvas>
 
 <div class="overlay" id="over">
-  <h2>Game Over</h2>
+  <h2>💀 Game Over</h2>
   <p id="final"></p>
   <button onclick="restart()">Retry</button>
 </div>
-
-<div id="touchArea"></div>
 </div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const SIZE = 21; // grid
-const CELL = 20;
+const SIZE = 20;
+let snake, dir, food, score;
+let ai = false;
 
-let snake, dir, food, score, high;
-let ai = true;
-
-high = localStorage.getItem("high") || 0;
+let high = localStorage.getItem("high") || 0;
 document.getElementById("high").innerText = "High: " + high;
 
+/* ---------- INIT ---------- */
 function init(){
   snake = [{x:10,y:10}];
   dir = {x:1,y:0};
   food = rand();
   score = 0;
   document.getElementById("over").style.display="none";
+  document.getElementById("score").innerText="Score: 0";
 }
 
 function rand(){
@@ -102,65 +101,79 @@ function rand(){
   };
 }
 
-/* 🍎 REALISTIC BITE SOUND */
-function biteSound(){
-  const a = new (window.AudioContext||window.webkitAudioContext)();
+/* ---------- INPUT (FIXED) ---------- */
+document.addEventListener("keydown", e=>{
+  const k = e.key.toLowerCase();
 
-  const noise = a.createBufferSource();
-  const buffer = a.createBuffer(1, a.sampleRate*0.2, a.sampleRate);
-  const data = buffer.getChannelData(0);
+  if((k==="arrowleft"||k==="a") && dir.x!==1) dir={x:-1,y:0};
+  if((k==="arrowright"||k==="d") && dir.x!==-1) dir={x:1,y:0};
+  if((k==="arrowup"||k==="w") && dir.y!==1) dir={x:0,y:-1};
+  if((k==="arrowdown"||k==="s") && dir.y!==-1) dir={x:0,y:1};
+});
 
-  for(let i=0;i<data.length;i++){
-    data[i] = Math.random()*2-1;
-  }
+/* ---------- BFS AI (TRUE PATHFINDING) ---------- */
+function bfs(start, target, snakeBody){
+  let queue = [start];
+  let visited = new Set();
+  let parent = new Map();
 
-  noise.buffer = buffer;
+  function key(p){ return p.x+","+p.y; }
 
-  const filter = a.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.value = 800;
+  visited.add(key(start));
 
-  const gain = a.createGain();
-  gain.gain.value = 0.2;
-
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(a.destination);
-
-  noise.start();
-}
-
-/* 🤖 SAFE AI (never dies) */
-function aiMove(){
-  const head = snake[0];
-
-  let options = [
+  const dirs = [
     {x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}
   ];
 
-  let best = dir;
+  while(queue.length){
+    let cur = queue.shift();
 
-  for(let o of options){
-    let nx = head.x + o.x;
-    let ny = head.y + o.y;
-
-    if(nx<0||ny<0||nx>=SIZE||ny>=SIZE) continue;
-
-    let safe = true;
-    for(let s of snake){
-      if(s.x===nx && s.y===ny) safe=false;
+    if(cur.x===target.x && cur.y===target.y){
+      let path=[];
+      let k=key(cur);
+      while(parent.has(k)){
+        path.push(cur);
+        cur = parent.get(k);
+        k=key(cur);
+      }
+      return path.reverse();
     }
 
-    if(safe){
-      best = o;
-      break;
+    for(let d of dirs){
+      let nx = cur.x + d.x;
+      let ny = cur.y + d.y;
+
+      let np = {x:nx,y:ny};
+      let nk = key(np);
+
+      if(nx<0||ny<0||nx>=SIZE||ny>=SIZE) continue;
+      if(visited.has(nk)) continue;
+
+      // avoid snake
+      if(snakeBody.some(s=>s.x===nx&&s.y===ny)) continue;
+
+      visited.add(nk);
+      parent.set(nk, cur);
+      queue.push(np);
     }
   }
-
-  dir = best;
+  return null;
 }
 
-/* UPDATE */
+/* ---------- AI CONTROL ---------- */
+function aiMove(){
+  let path = bfs(snake[0], food, snake);
+
+  if(path && path.length){
+    let next = path[0];
+    dir = {
+      x: next.x - snake[0].x,
+      y: next.y - snake[0].y
+    };
+  }
+}
+
+/* ---------- GAME LOGIC ---------- */
 function update(){
   if(ai) aiMove();
 
@@ -174,48 +187,41 @@ function update(){
   }
 
   for(let s of snake){
-    if(s.x===head.x && s.y===head.y) return gameOver();
+    if(s.x===head.x&&s.y===head.y) return gameOver();
   }
 
   snake.unshift(head);
 
-  if(head.x===food.x && head.y===food.y){
+  if(head.x===food.x&&head.y===food.y){
     score++;
     food = rand();
-    biteSound();
     document.getElementById("score").innerText="Score: "+score;
   } else {
     snake.pop();
   }
 }
 
-/* 🐍 SMOOTH RENDER (NO JITTER) */
+/* ---------- SMOOTH RENDER (60FPS CLEAN) ---------- */
 function draw(){
-  ctx.clearRect(0,0,420,420);
+  ctx.clearRect(0,0,400,400);
 
   // food
   ctx.fillStyle="red";
   ctx.beginPath();
-  ctx.arc(food.x*CELL+10, food.y*CELL+10, 8,0,Math.PI*2);
+  ctx.arc(food.x*20+10, food.y*20+10, 8,0,Math.PI*2);
   ctx.fill();
 
-  // snake (smooth circles)
+  // snake
   for(let i=0;i<snake.length;i++){
-    let s = snake[i];
     ctx.fillStyle = i===0 ? "#00ff88" : "#22c55e";
-
     ctx.beginPath();
-    ctx.arc(
-      s.x*CELL+10,
-      s.y*CELL+10,
-      9,0,Math.PI*2
-    );
+    ctx.arc(snake[i].x*20+10, snake[i].y*20+10, 9,0,Math.PI*2);
     ctx.fill();
   }
 }
 
-/* GAME LOOP (smooth 60fps + fixed movement) */
-let last=0, acc=0;
+/* ---------- FIXED TIMESTEP ENGINE ---------- */
+let last=0,acc=0;
 const STEP=120;
 
 function loop(t){
@@ -234,7 +240,7 @@ function loop(t){
   draw();
 }
 
-/* GAME OVER */
+/* ---------- GAME OVER ---------- */
 function gameOver(){
   document.getElementById("over").style.display="flex";
   document.getElementById("final").innerText="Score: "+score;
@@ -247,30 +253,13 @@ function gameOver(){
   document.getElementById("high").innerText="High: "+high;
 }
 
-/* restart */
+/* ---------- CONTROL ---------- */
+function toggleAI(){
+  ai=!ai;
+  alert("AI: "+(ai?"ON":"OFF"));
+}
+
 function restart(){ init(); }
-
-/* 📱 SWIPE CONTROLS */
-let sx,sy;
-
-document.getElementById("touchArea").addEventListener("touchstart",e=>{
-  sx=e.touches[0].clientX;
-  sy=e.touches[0].clientY;
-});
-
-document.getElementById("touchArea").addEventListener("touchend",e=>{
-  let dx=e.changedTouches[0].clientX-sx;
-  let dy=e.changedTouches[0].clientY-sy;
-
-  if(Math.abs(dx)>Math.abs(dy)){
-    dir = dx>0 ? {x:1,y:0}:{x:-1,y:0};
-  } else {
-    dir = dy>0 ? {x:0,y:1}:{x:0,y:-1};
-  }
-});
-
-/* toggle AI */
-function toggleAI(){ ai=!ai; }
 
 init();
 requestAnimationFrame(loop);
